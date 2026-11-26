@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: disc-live-classe
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: TEACHER_PASSWORD
+        generateValue: true
