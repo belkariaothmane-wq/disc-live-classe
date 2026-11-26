@@ -46,3 +46,30 @@ globalThis.DISC = {
   manager:["Je tranche sur ce qu’il faut reprendre en premier.","J’explique l’enjeu et je redonne de l’élan.","J’écoute ses contraintes et je propose du soutien.","Je clarifie les critères du rendu attendu."],
   collaborateur:["J’attends qu’on fixe la priorité.","J’attends qu’on m’explique l’enjeu du dossier.","J’attends qu’on écoute mes contraintes.","J’attends des critères précis pour le rendu."]
 };
+
+DISC.lesson = {
+  chapters:[
+    {title:"À quoi sert le DISC ?", intro:"Le DISC est une grille de lecture des comportements professionnels observables. Il aide à communiquer, déléguer, motiver et gérer les différences dans une équipe.", discussion:"Qu’avez-vous déjà adapté dans votre façon de donner une consigne à deux personnes différentes ?"},
+    {title:"Deux axes, quatre tendances", intro:"Pour situer les quatre tendances, on distingue le rythme d’action et ce à quoi la personne prête le plus d’attention.", discussion:"Dans une urgence, que change le fait de décider vite ou de prendre le temps de vérifier ?"},
+    {title:"Forces et points de vigilance", intro:"Chaque tendance peut aider l’équipe dans certaines situations. Un comportement utile peut devenir gênant si on l’accentue ou si le contexte change.", discussion:"Choisissez une force. Dans quelle situation pourrait-elle devenir un point de vigilance ?"},
+    {title:"Quatre façons de manager", intro:"Les tendances peuvent s’exprimer dans des façons de manager. Un même manager peut passer de l’une à l’autre selon la situation, y compris sous pression.", discussion:"Pour une prise de poste, puis pour une urgence, quel style choisiriez-vous et pourquoi ?"},
+    {title:"Adapter sa communication", intro:"Partez des besoins exprimés par votre collaborateur avant de choisir le canal, le niveau de détail ou la marge de décision.", discussion:"Quelle question poseriez-vous pour savoir de quoi votre collaborateur a réellement besoin ?"},
+    {title:"Un projet urgent, quatre messages", intro:"Le projet est urgent et le jalon est fixé à vendredi. L’objectif collectif reste le même. Le message change selon ce que chacun doit faire et les repères dont il a besoin.", discussion:"Reformulez le même message pour une personne qui a besoin d’autonomie, puis pour une personne qui veut des critères précis."},
+    {title:"Utiliser le DISC avec discernement", intro:"Le DISC fournit un langage commun pour parler des comportements et ajuster son management. Les tendances forment des hypothèses à vérifier par l’observation, l’écoute et le feedback.", discussion:"Quelle information allez-vous chercher auprès du collaborateur avant d’adapter votre décision ?"}
+  ],
+  history:"La méthode s’inspire des travaux du psychologue américain William Moulton Marston dans les années 1920.",
+  uses:["Communication et feedback","Délégation et autonomie","Motivation et cohésion","Gestion des conflits et adaptation"],
+  styles:[
+    {forces:"Décider rapidement et donner un cap, notamment dans l’urgence.", preference:"Objectifs clairs, autonomie, défis, décisions rapides.", style:"Directif et orienté résultat", caution:"Imposer son rythme ou négliger les effets sur l’équipe.", expect:"Autonomie, résultats, défis.", adapt:"Aller à l’essentiel, fixer un objectif et laisser une marge de décision.", avoid:"Micro-management, longues explications, hésitations.", example:"Tu prends en charge la coordination avec les interlocuteurs clés. J’attends une proposition d’action d’ici vendredi."},
+    {forces:"Mobiliser, communiquer et faire émerger des idées.", preference:"Échanges, reconnaissance, projets collectifs, liberté d’expression.", style:"Persuasif et enthousiaste", caution:"Manquer de structure, de précision ou de suivi.", expect:"Reconnaissance, échanges, dynamisme.", adapt:"Valoriser ses idées, expliquer l’enjeu et convenir d’un suivi régulier.", avoid:"Froideur, critiques en public, absence de feedback.", example:"Ton rôle est essentiel pour mobiliser l’équipe et faire adhérer les parties prenantes."},
+    {forces:"Écouter, soutenir et maintenir la cohésion.", preference:"Cadre clair, temps d’adaptation, confiance, travail d’équipe.", style:"Participatif et sécurisant", caution:"Éviter un conflit ou reporter un arbitrage nécessaire.", expect:"Sécurité, confiance, stabilité.", adapt:"Expliquer le changement, écouter et préciser les étapes et les appuis.", avoid:"Annonces brutales, pression excessive, changements imprévus.", example:"Nous allons avancer par étapes. Je t’explique le plan et nous ferons le point chaque semaine."},
+    {forces:"Structurer le travail, vérifier les faits et sécuriser la qualité.", preference:"Données, méthodes, critères, délais réalistes, autonomie encadrée.", style:"Normatif et rigoureux", caution:"Accorder trop de place au contrôle, aux règles ou aux détails.", expect:"Clarté, méthode, qualité.", adapt:"Donner une consigne écrite, des critères de réussite et un calendrier précis.", avoid:"Improvisation, consignes floues, changements constants.", example:"Voici les livrables, les critères de qualité, les responsabilités et le calendrier."}
+  ],
+  limits:[
+    "Un profil décrit des préférences comportementales. Il ne définit pas toute la personnalité.",
+    "Le DISC ne mesure ni les compétences, ni l’intelligence, ni l’expérience, ni la motivation, ni les valeurs.",
+    "Les comportements varient selon la tâche, le contexte, la pression et les relations.",
+    "Un résultat DISC ne suffit pas pour décider d’un recrutement, d’une promotion ou d’une exclusion."
+  ],
+  takeaway:"Repérez votre réflexe, demandez à l’autre ce qui l’aide, puis ajustez votre façon d’annoncer ou de mettre en œuvre la décision."
+};

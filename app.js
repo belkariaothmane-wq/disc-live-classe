@@ -2,6 +2,9 @@
 const root=document.querySelector("#app");
 const appRole=location.pathname.slice(1)||"home";
 const phases=["Comprendre le DISC","Mes réflexes","Mes attentes","Jeu en binôme"];
+const activities=["reflexes","attentes","pair"];
+const studentLabels=["Test Mes réflexes","Test Mes attentes","Jeu en binôme"];
+const groupTitles={reflexes:"Comment le groupe agit",attentes:"Ce que le groupe attend d’un manager"};
 const {traits}=DISC;
 const authKey="disc-live-"+appRole;
 let auth="", state=null, view="students", person="", pending=false, signature="", statusTimer;
@@ -9,7 +12,7 @@ let draftKey="", answers=[], question=0;
 let pairSelected=null, pairId=null;
 const demoPerson={id:"lina",name:"Lina",avatar:"fille",reflexes:[6,2,5,3],attentes:[2,3,4,7]};
 const demoPair={id:"pair",manager:"Lina",collaborator:"Yanis",managerReady:true,collaboratorReady:true,mAnswer:0,cAnswer:2};
-let demo=false, personal=false, polling=false, revision=0;
+let demo=false, studentActivity=null, polling=false, revision=0;
 try {auth=sessionStorage.getItem(authKey)||"";signature=localStorage.getItem("disc-signature")||"";}catch{}
 const e=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const button=(label,action,options={})=>`<button type="button" data-action="${action}" ${options.value===undefined?"":`data-value="${e(options.value)}"`} ${options.primary?'class="primary"':""} ${options.disabled?"disabled":""} ${options.pressed===undefined?"":`aria-pressed="${options.pressed}"`}>${e(label)}</button>`;
@@ -55,12 +58,45 @@ function studentProfile(student) {
   <p class="muted">Les pourcentages correspondent aux réponses de l’exercice. Selon la situation, vous pouvez mobiliser plusieurs tendances.</p>`;
 }
 function groups(data) {
-  return `<div class="columns">${profile("Comment le groupe agit",data.reflexes.scores,null,data.reflexes.count)}${profile("Ce que le groupe attend d’un manager",data.attentes.scores,null,data.attentes.count)}</div>`;
+  return `<div class="columns">${activities.slice(0,2).map(key=>{
+    const result=data[key];
+    const active=state.reveal===key;
+    const controls=button(active?"Masquer ce bilan":"Projeter le bilan « "+(key==="reflexes"?"Mes réflexes":"Mes attentes")+" »",
+      "project-group",{value:active?"":key,primary:!active,disabled:!result.count&&!active});
+    return `<div>${profile(groupTitles[key],result.scores,null,result.count)}<div class="watch">${controls}</div></div>`;
+  }).join("")}</div>`;
 }
-function lesson() {
-  return `<p class="eyebrow">Comprendre la méthode</p><h2>Quatre façons d’aborder le travail</h2><p>Le DISC propose quatre tendances comportementales. Nous pouvons combiner ces tendances selon la situation, la tâche ou la personne avec qui nous travaillons.</p>
-  <div class="tiles">${traits.map(t=>panel(`${badge(t)}<h3>${t.label}</h3><p>${t.description}</p><p><strong>Point de vigilance</strong><br>${t.limit}</p>`,"trait").replace('class="panel trait"',`class="panel trait" style="--tone:${t.color}"`)).join("")}</div>
-  <p class="sample"><strong>À discuter</strong><br>Quand votre réflexe aide-t-il l’équipe ? À partir de quand peut-il la freiner ?</p>`;
+function lesson(controls=false) {
+  const course=DISC.lesson;
+  const current=state.chapter ?? 0;
+  const chapter=course.chapters[current];
+  const names=traits.map((trait,i)=>i===3?"Conformité / Conscienciosité":trait.label);
+  const tile=(fields)=>`<div class="course-grid">${traits.map((trait,i)=>`<article class="course-tile" style="--tone:${trait.color}">
+    ${badge(trait)}<h3>${names[i]}</h3>${fields(course.styles[i],trait)}</article>`).join("")}</div>`;
+  const fields=(rows)=>rows.map(([label,value])=>`<p><strong>${label}</strong><br>${e(value)}</p>`).join("");
+  const chips=(indexes)=>indexes.map(i=>badge(traits[i])).join(" ");
+  const bodies=[
+    ()=>`<p>${e(course.history)}</p><div class="course-keywords">${course.uses.map(use=>`<span>${e(use)}</span>`).join("")}</div>
+      <p><strong>DISC</strong> · ${names.join(" · ")}</p><p>Chaque tendance présente des atouts selon la tâche et les personnes. Une même personne peut mobiliser plusieurs tendances.</p>`,
+    ()=>`<div class="course-axis">
+      <article><h3>Rythme d’action</h3><p>${chips([0,1])} Action plus rapide et directe</p><p>${chips([2,3])} Approche plus posée et réfléchie</p></article>
+      <article><h3>Orientation de l’attention</h3><p>${chips([0,3])} Tâche, résultat ou critères</p><p>${chips([1,2])} Relations, échanges ou coopération</p></article>
+      </div><p class="muted">Le rythme et l’orientation sont deux dimensions distinctes. On peut être orienté vers la tâche tout en privilégiant une analyse posée.</p>`,
+    ()=>tile((details,trait)=>`<p>${e(trait.description)}</p>`+fields([["Force",details.forces],["Préférences",details.preference],["Point de vigilance",trait.limit]])),
+    ()=>tile(details=>`<p><strong>${e(details.style)}</strong></p>`+fields([["Apport à l’équipe",details.forces],["Point de vigilance",details.caution]])),
+    ()=>tile(details=>fields([["Ce qui peut aider",details.expect],["À privilégier",details.adapt],["À éviter",details.avoid]])),
+    ()=>tile(details=>`<blockquote>« ${e(details.example)} »</blockquote>`)+
+      "<p>Vous pouvez adapter le canal, le niveau de détail, le degré d’autonomie ou les points d’appui.</p>",
+    ()=>`<ul class="course-limits">${course.limits.map(limit=>`<li>${e(limit)}</li>`).join("")}</ul><p class="sample"><strong>À retenir</strong><br>${e(course.takeaway)}</p>`
+  ];
+  return `<section class="course"><p class="eyebrow">Cours DISC · ${current+1} / ${course.chapters.length}</p>
+    <h2>${e(chapter.title)}</h2>
+    ${controls?`<div class="course-controls row">
+      ${button("Précédent","lesson",{value:current-1,disabled:current===0})}
+      <label for="course-chapter">Chapitre</label><select id="course-chapter">${course.chapters.map((item,i)=>`<option value="${i}" ${i===current?"selected":""}>${e(item.title)}</option>`).join("")}</select>
+      ${button("Suivant","lesson",{value:current+1,disabled:current===course.chapters.length-1})}
+    </div>`:""}<p class="course-intro">${e(chapter.intro)}</p>
+    ${bodies[current]()}<p class="sample"><strong>À discuter</strong><br>${e(chapter.discussion)}</p></section>`;
 }
 function pairCompare(pair) {
   const choices=[{label:"Manager",name:pair.manager,ready:pair.managerReady,index:pair.mAnswer,items:DISC.manager},
@@ -87,15 +123,40 @@ function join() {
   <label for="avatar">Silhouette du bilan</label><select id="avatar" name="avatar"><option value="neutre">Neutre</option><option value="fille">Fille</option><option value="garçon">Garçon</option></select>
   <p class="muted">L’enseignant peut consulter vos bilans et vos réponses de binôme. Le bilan de groupe s’affiche sous forme agrégée.</p><button class="primary">Rejoindre</button></form>`,"narrow");
 }
+function activityStatus() {
+  const phase=state.phase;
+  const key=phase===1?"reflexes":phase===2?"attentes":null;
+  let description="Les trois activités sont verrouillées. Donnez le top départ lorsque la classe est prête.";
+  if(key){
+    const done=state.groups[key].count;
+    description=`Questionnaire ouvert · ${DISC[key].length} questions · ${done} sur ${state.students.length} terminé(s).`;
+  }
+  if(phase===3) description="Les étudiants voient la question après avoir été associés à un binôme et à un rôle.";
+  return `<div class="panel sample" role="region" aria-label="Activité en cours">
+    <p class="eyebrow">Activité en cours</p><h2>${phases[phase]}</h2><p>${description}</p>
+    <div class="row">
+    ${phase&&!demo?`<a class="btn primary" href="/student?code=${e(state.code)}" target="_blank" rel="noopener">Voir l’espace étudiant</a>`:""}
+    ${phase?button("Fermer l’activité","phase",{value:0}):""}</div>
+  </div>`;
+}
+function questionnairePreview(key) {
+  if(!key)return "";
+  const open=root.querySelector("#questionnaire-preview")?.open;
+  return `<details id="questionnaire-preview" ${open?"open":""}><summary>Voir les ${DISC[key].length} questions et les choix</summary>
+    <ol>${DISC[key].map(([question,...choices])=>`<li><p><strong>${e(question)}</strong></p><ul>${choices.map((choice,i)=>`<li>${traits[i].id} · ${e(choice)}</li>`).join("")}</ul></li>`).join("")}</ol>
+  </details>`;
+}
 function teacher() {
   if(!state)return signIn();
   const selected=state.students.find(s=>s.id===person);
-  const steps=`<div class="tabs" aria-label="Étape projetée">${phases.map((title,i)=>button(title,"phase",{value:i,pressed:state.phase===i})).join("")}</div>`;
+  const stepLabels=["Présenter le DISC","Top départ · Mes réflexes","Top départ · Mes attentes","Top départ · Jeu en binôme"];
+  const steps=`<div class="tabs" aria-label="Activité de la séance">${stepLabels.map((title,i)=>button(title,"phase",{value:i,pressed:state.phase===i})).join("")}</div>`;
+  const key=state.phase===1?"reflexes":state.phase===2?"attentes":null;
   const views=`<div class="row watch">${["students","groups","pairs","lesson"].map((id,i)=>button(["Étudiants","Bilan du groupe","Binômes","Support de cours"][i],"view",{value:id,pressed:id===view})).join("")}</div>`;
   const roster=state.students.length?`<div class="roster">${state.students.map(s=>`<button type="button" data-action="person" data-value="${e(s.id)}"><strong>${e(s.name)}</strong><span>${Number(Boolean(s.reflexes))+Number(Boolean(s.attentes))}/2 questionnaires</span></button>`).join("")}</div>`:"<p>Aucun étudiant inscrit pour le moment.</p>";
-  let contents=lesson();
-  if(view==="students")contents=`<h2>Suivi des étudiants</h2>${roster}${selected?`<div class="watch">${studentProfile(selected)}</div>`:""}`;
-  if(view==="groups")contents=`<h2>Bilan du groupe</h2>${groups(state.groups)}${button(state.reveal?"Masquer sur la projection":"Afficher sur la projection","reveal",{primary:true})}`;
+  let contents=view==="lesson"?lesson(true):"";
+  if(view==="students")contents=`<h2>Suivi des étudiants</h2>${state.students.length?roster:"<p>Partagez le lien étudiant pour inscrire les participants.</p>"}${questionnairePreview(key)}${selected?`<div class="watch">${studentProfile(selected)}</div>`:""}`;
+  if(view==="groups")contents=`<h2>Résultats à projeter</h2>${groups(state.groups)}`;
   if(view==="pairs"){
     const assigned=new Set(state.pairs.flatMap(p=>[p.manager,p.collaborator]));
     const available=state.students.filter(p=>!assigned.has(p.name));
@@ -105,7 +166,7 @@ function teacher() {
     ${state.pairs.map(p=>panel(`${pairCompare(p)}<div class="row watch">${button(p.id===state.projectedPair?"Retirer de la projection":"Projeter ce binôme","project-pair",{value:p.id,disabled:!p.managerReady||!p.collaboratorReady||state.phase!==3})}
       ${button("Dissoudre le binôme","unpair",{value:p.id})}</div>`)).join("")}`;
   }
-  return `<p class="eyebrow">${demo?"Démonstration":"Pilotage de la séance"}</p><h1>Espace enseignant</h1>${steps}
+  return `<p class="eyebrow">${demo?"Démonstration":"Pilotage de la séance"}</p><h1>Espace enseignant</h1>${steps}${activityStatus()}
   <div class="teacher-shell"><div>${panel(views+contents)}</div><aside>${panel(`<h2>Accès étudiant</h2><p>Code de séance <strong>${e(state.code)}</strong></p>
   <p>${state.students.length} inscrit(s)</p><div class="row">${demo?"":`<a class="btn" href="/student?code=${e(state.code)}" target="_blank" rel="noopener">Lien étudiant</a>${button("Copier le lien","copy")}`}<a class="btn" href="/projection" target="_blank" rel="noopener">Ouvrir la projection</a></div>${demo?button("Quitter la démonstration","exit-demo"):button("Nouvelle séance","reset")}`)}</aside></div>`;
 }
@@ -118,32 +179,50 @@ function questionnaire(key) {
   <h2>${e(item[0])}</h2><div class="answers">${permutation.map(i=>button(item[i+1],"option",{value:i,pressed:answers[question]===i})).join("")}</div>
   <div class="row form-actions">${button("Précédente","prev",{disabled:question===0})}${button(question===DISC[key].length-1?"Voir mon bilan":"Suivante","next",{primary:true,disabled:!Number.isInteger(answers[question])})}</div>`,"narrow");
 }
+function studentMenu() {
+  return panel(`<h1>${e(state.me.name)}</h1><div class="student-menu">${activities.map((key,i)=>{
+    const finished=key==="pair"?state.pair?.managerReady&&state.pair?.collaboratorReady:state.me[key];
+    const open=state.phase===i+1;
+    const status=finished?"Voir mon résultat":!open?"En attente du top départ":
+      key==="pair"&&!state.pair?"En attente du binôme":"Disponible";
+    return `<button type="button" data-action="student-open" data-value="${key}" ${open||finished?"":"disabled"}>
+      <strong>${studentLabels[i]}</strong><span>${status}</span></button>`;
+  }).join("")}</div>`,"narrow");
+}
 function student() {
   if(!state)return join();
-  if(personal)return panel(`<div class="row watch">${button("Revenir à l’activité","personal")}</div>${studentProfile(state.me)}`);
-  if(state.phase===0)return panel(`<p class="eyebrow">${e(state.me.name)}</p>${lesson()}`);
-  const key=state.phase===1?"reflexes":state.phase===2?"attentes":null;
-  if(key&&!state.me[key])return questionnaire(key);
-  if(state.phase===3){
-    const pair=state.pair;
-    if(!pair)return panel(`<h2>${e(state.me.name)}</h2><p>L’enseignant prépare les binômes.</p>`,"narrow");
-    if(pairId!==pair.id){pairId=pair.id;pairSelected=null;}
-    if(pair.answered)return panel(`<p class="eyebrow">Votre binôme</p><h2>${DISC.scene}</h2>${pairCompare(pair)}`);
-    const manager=pair.role==="manager";
-    return panel(`<p class="eyebrow">${e(state.me.name)} · ${manager?"Manager":"Collaborateur"}</p><h2>${DISC.scene}</h2>
-    <p>${manager?"Que feriez-vous en premier ?":"Qu’attendriez-vous en priorité de votre manager ?"}</p>
+  if(!studentActivity)return studentMenu();
+  const back=`<div class="row watch">${button("Retour aux activités","student-back")}</div>`;
+  if(studentActivity!=="pair"){
+    const key=studentActivity;
+    if(state.me[key])return back+`<div class="narrow"><h1>${e(state.me.name)}</h1>${profile(studentLabels[activities.indexOf(key)],state.me[key],state.me.avatar)}
+      <p class="muted">Ce bilan décrit vos réponses à l’exercice. Vos choix peuvent varier suivant la situation.</p></div>`;
+    if(state.phase!==activities.indexOf(key)+1)return back+panel("<h2>Questionnaire fermé</h2><p>Attendez le prochain top départ pour reprendre.</p>","narrow");
+    return back+questionnaire(key);
+  }
+  const pair=state.pair;
+  if(!pair)return back+panel("<h2>Jeu en binôme</h2><p>L’enseignant prépare les binômes.</p>","narrow");
+  if(pairId!==pair.id){pairId=pair.id;pairSelected=null;}
+  const manager=pair.role==="manager";
+  const partner=manager?pair.collaborator:pair.manager;
+  const pairing=`<p class="eyebrow">${e(state.me.name)} · ${manager?"Manager":"Collaborateur"}</p><p>Votre binôme <strong>${e(partner)}</strong> · ${manager?"Collaborateur":"Manager"}</p>`;
+  if(pair.managerReady&&pair.collaboratorReady)return back+panel(`${pairing}<h2>${DISC.scene}</h2>${pairCompare(pair)}`);
+  if(state.phase!==3)return back+panel(`${pairing}<h2>Activité fermée</h2><p>Attendez le prochain top départ.</p>`,"narrow");
+  if(pair.answered)return back+panel(`${pairing}<h2>Réponse enregistrée</h2><p>Attendez la réponse de votre binôme pour les comparer.</p>`,"narrow");
+  return back+panel(`${pairing}<h2>${DISC.scene}</h2><p>${manager?"Que feriez-vous en premier ?":"Qu’attendriez-vous en priorité de votre manager ?"}</p>
     <div class="answers">${DISC[pair.role].map((text,i)=>button(text,"pair-option",{value:i,pressed:pairSelected===i})).join("")}</div>
     ${button("Valider ma réponse","pair-answer",{primary:true,disabled:pairSelected===null})}`,"narrow");
-  }
-  return panel(studentProfile(state.me));
 }
 function projection() {
   if(!state)return panel("<h1>Connexion à la séance…</h1>");
-  if(state.groups)return panel(`<h1>Tendances du groupe</h1>${groups(state.groups)}`);
+  if(state.group){
+    const {key,scores,count}=state.group;
+    return panel(`<p class="eyebrow">Bilan collectif</p><h1>${key==="reflexes"?"Mes réflexes":"Mes attentes"}</h1>${profile(groupTitles[key],scores,null,count)}`);
+  }
   if(state.phase===0)return panel(`<h1>Comprendre le DISC</h1>${lesson()}`);
   if(state.phase===3&&state.pair)return panel(`<h1>${DISC.scene}</h1>${pairCompare(state.pair)}`);
   if(state.phase===3)return panel(`<h1>Jeu en binôme</h1><p class="sample">${DISC.scene}</p><p>Répondez sur votre téléphone selon votre rôle.</p>`);
-  return panel(`<h1>${phases[state.phase]}</h1><p>Répondez au questionnaire sur votre téléphone.</p>`);
+  return panel(`<h1>${phases[state.phase]}</h1><p>Sur votre téléphone, ouvrez « ${studentLabels[state.phase-1]} ».</p>`);
 }
 function drawAvatar(canvas) {
   const scores=canvas.dataset.scores.split(",").map(Number);
@@ -167,14 +246,13 @@ function drawAvatar(canvas) {
 }
 function render() {
   document.body.classList.toggle("projector",appRole==="projection");
+  document.body.classList.toggle("student-only",appRole==="student");
+  if(appRole==="student")document.querySelector(".brand")?.removeAttribute("href");
   const pairValues = [...root.querySelectorAll("#pair select")].map(select=>select.value);
   root.innerHTML=({home,teacher,student,projection}[appRole]||home)();
   root.querySelectorAll("#pair select").forEach((select,i)=>{
     if([...select.options].some(option=>option.value===pairValues[i]))select.value=pairValues[i];
   });
-  if(appRole==="student" && !personal && state?.phase===3 && (state.me.reflexes||state.me.attentes)) {
-    root.insertAdjacentHTML("afterbegin",`<div class="row watch">${button("Mes bilans","personal")}</div>`);
-  }
   root.querySelectorAll("canvas").forEach(drawAvatar);
   const img=root.querySelector("#signature");
   if(img){
@@ -192,15 +270,20 @@ async function run(task) {
   finally{pending=false;}
 }
 async function teacherAction(payload) {
-  if(!demo){state=await call("teacher",payload);return;}
-  if(payload.action==="phase")state.phase=payload.phase;
-  if(payload.action==="reveal")state.reveal=payload.value;
+  if(!demo)state=await call("teacher",payload);
+  else if(payload.action==="phase")state.phase=payload.phase;
+  else if(payload.action==="project-group")state.reveal=payload.key;
+  else if(payload.action==="lesson")state.chapter=payload.chapter;
+  if(payload.action==="phase"||payload.action==="reset") {
+    view=state.phase===0?"lesson":state.phase===3?"pairs":"students";
+  }
 }
 root.addEventListener("click",event=>{
   const target=event.target.closest("[data-action]");
   if(!target||target.disabled)return;
   const {action,value}=target.dataset;
-  if(action==="personal"){personal=!personal;render();return;}
+  if(action==="student-open"){studentActivity=value;render();return;}
+  if(action==="student-back"){studentActivity=null;render();return;}
   if(action==="view"){view=value;render();return;}
   if(action==="person"){person=value;render();return;}
   if(action==="demo"){
@@ -227,7 +310,7 @@ root.addEventListener("click",event=>{
   if(action==="reset"&&!confirm("Ouvrir une nouvelle séance et vider les résultats actuels ?"))return;
   if(action==="unpair"&&!confirm("Dissoudre ce binôme et effacer ses réponses ?"))return;
   const inputs={
-    phase:{phase:Number(value)},reveal:{value:!state.reveal},reset:{},
+    lesson:{chapter:Number(value)},phase:{phase:Number(value)},"project-group":{key:value||null},reset:{},
     unpair:{id:value},"project-pair":{id:state.projectedPair===value?null:value}
   };
   if(Object.hasOwn(inputs,action))run(()=>teacherAction({action,...inputs[action]}));
@@ -236,10 +319,14 @@ root.addEventListener("submit",event=>{
   event.preventDefault();
   const data=Object.fromEntries(new FormData(event.target));
   if(event.target.id==="login")run(async()=>{setAuth((await call("login",data)).token);state=await call("teacher");});
-  if(event.target.id==="join")run(async()=>{const dataIn=await call("join",data);setAuth(dataIn.token);state=dataIn.state;draftKey="";});
+  if(event.target.id==="join")run(async()=>{const dataIn=await call("join",data);setAuth(dataIn.token);state=dataIn.state;draftKey="";studentActivity=null;});
   if(event.target.id==="pair")run(()=>teacherAction({action:"pair",...data}));
 });
 root.addEventListener("change",event=>{
+  if(event.target.id==="course-chapter"){
+    run(()=>teacherAction({action:"lesson",chapter:Number(event.target.value)}));
+    return;
+  }
   if(event.target.id!=="signature-file")return;
   const file=event.target.files[0];
   if(!file)return;
@@ -260,7 +347,7 @@ async function poll() {
     const next=await call(appRole);
     if(requestRevision===revision&&!demo&&JSON.stringify(next)!==JSON.stringify(state)){state=next;render();}
   }catch(error){
-    if(requestRevision===revision&&error.status===401){setAuth("");state=null;render();notify(error.message);}
+    if(requestRevision===revision&&error.status===401){setAuth("");state=null;studentActivity=null;render();notify(error.message);}
   }finally{polling=false;}
 }
 render();
