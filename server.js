@@ -1,5 +1,6 @@
 "use strict";
 require("./content");
+const QRCode = require("qrcode");
 const http = require("node:http");
 const fs = require("node:fs");
 const {randomBytes,timingSafeEqual,createHash} = require("node:crypto");
@@ -18,7 +19,7 @@ let room = makeRoom();
 
 function makeRoom() {
   return {code:randomBytes(4).toString("hex").toUpperCase(), phase:0, chapter:0, example:0,
-    students:[], pairs:[], reveal:null, projectedPair:null};
+    students:[], pairs:[], reveal:null, projectedPair:null, projectedStudent:null, invite:false};
 }
 function summary(key, students) {
   const completed = students.filter(student => student[key]);
@@ -35,9 +36,12 @@ function pairView(pair, current) {
     collaboratorReady:Number.isInteger(pair.cAnswer), ...(ready ? {mAnswer:pair.mAnswer,cAnswer:pair.cAnswer} : {}),
     ...(current ? {role:current.id===pair.m?"manager":"collaborateur", answered:Number.isInteger(current.id===pair.m?pair.mAnswer:pair.cAnswer)} : {})};
 }
+function publicProfile({name,avatar,reflexes,attentes}) {
+  return {name,avatar,reflexes,attentes};
+}
 function state(role, credential) {
   const base = {phase:room.phase};
-  if (role==="teacher") return {...base, chapter:room.chapter, example:room.example, code:room.code, reveal:room.reveal, projectedPair:room.projectedPair,
+  if (role==="teacher") return {...base, chapter:room.chapter, example:room.example, code:room.code, reveal:room.reveal, projectedPair:room.projectedPair, projectedStudent:room.projectedStudent, invite:room.invite,
     students:room.students.map(({id,name,avatar,reflexes,attentes})=>({id,name,avatar,reflexes,attentes})),
     pairs:room.pairs.map(pair=>pairView(pair)), groups:aggregates()};
   if (role==="student") {
@@ -47,7 +51,8 @@ function state(role, credential) {
     return {...base, me:{name:me.name,avatar:me.avatar,reflexes:me.reflexes,attentes:me.attentes}, pair:pair?pairView(pair,me):null};
   }
   const pair = room.phase===3 && room.pairs.find(p=>p.id===room.projectedPair);
-  return {...base, chapter:room.chapter, example:room.example, group:room.reveal?{key:room.reveal,...summary(room.reveal,room.students)}:null, pair:pair?pairView(pair):null};
+  const student=room.students.find(p=>p.id===room.projectedStudent);
+  return {...base, chapter:room.chapter, example:room.example, invite:room.invite?room.code:null, student:student?publicProfile(student):null, group:room.reveal?{key:room.reveal,...summary(room.reveal,room.students)}:null, pair:pair?pairView(pair):null};
 }
 function send(res,status,body,type="application/json") {
   res.writeHead(status,{"Content-Type":type,"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"});
@@ -59,10 +64,16 @@ async function read(req) {
   for await (const chunk of req) {input+=chunk;if(input.length>8000) throw Error("Requête trop longue.");}
   return JSON.parse(input);
 }
+function clearProjection() {
+  room.reveal=null;
+  room.projectedPair=null;
+  room.projectedStudent=null;
+  room.invite=false;
+}
 function command(data) {
   const {action} = data;
   if (action==="phase" && Number.isInteger(data.phase) && data.phase>=0 && data.phase<=3) {
-    if(room.phase!==data.phase){room.reveal=null;room.projectedPair=null;}
+    if(room.phase!==data.phase)clearProjection();
     room.phase=data.phase;
   } else if (action==="lesson") {
     if(!Number.isInteger(data.chapter) || data.chapter<0 || data.chapter>=DISC.lesson.chapters.length) throw Error("Chapitre inconnu.");
@@ -71,10 +82,17 @@ function command(data) {
     if (!Number.isInteger(data.example) || !DISC.roleExamples[data.example]) throw Error("Exemple inconnu.");
     room.example=data.example;
   } else if (action==="project-group" && [null,"reflexes","attentes"].includes(data.key)) {
+    clearProjection();
     room.reveal=data.key;
-    if(data.key) room.projectedPair=null;
-  }
-  else if (action==="reset") room=makeRoom();
+  } else if (action==="project-student") {
+    const student=room.students.find(p=>p.id===data.id);
+    if(data.id!==null && !student?.reflexes && !student?.attentes) throw Error("Aucun bilan terminé pour cet étudiant.");
+    clearProjection();
+    room.projectedStudent=data.id;
+  } else if (action==="project-invite" && typeof data.value==="boolean") {
+    clearProjection();
+    room.invite=data.value;
+  } else if (action==="reset") room=makeRoom();
   else if (action==="pair") {
     if (data.m===data.c || ![data.m,data.c].every(id=>room.students.some(s=>s.id===id)) ||
         room.pairs.some(pair=>[data.m,data.c].some(id=>id===pair.m||id===pair.c))) throw Error("Choisissez deux étudiants disponibles.");
@@ -87,8 +105,8 @@ function command(data) {
   } else if (action==="project-pair") {
     const pair=room.pairs.find(p=>p.id===data.id);
     if(data.id!==null && (!pair || !Number.isInteger(pair.mAnswer) || !Number.isInteger(pair.cAnswer))) throw Error("Attendez les deux réponses.");
+    clearProjection();
     room.projectedPair=data.id;
-    if(data.id)room.reveal=null;
   } else throw Error("Commande indisponible.");
 }
 
@@ -104,6 +122,17 @@ const server = http.createServer(async(req,res)=>{
     const route=url.pathname;
     const method=req.method;
     const credential=req.headers.authorization?.replace(/^Bearer /,"");
+    if(method==="GET"&&route==="/invite-qr.png"){
+      const code=url.searchParams.get("code");
+      if(!room.invite||code!==room.code) return send(res,404,{error:"Invitation indisponible."});
+      const scheme=req.socket?.encrypted||req.headers["x-forwarded-proto"]==="https"?"https":"http";
+      const origin=process.env.RENDER_EXTERNAL_URL || scheme+"://"+(req.headers.host||"localhost:"+port);
+      const target=new URL("/student",origin);
+      target.searchParams.set("code",code);
+      const png=await QRCode.toBuffer(target.href,{width:640,margin:4,errorCorrectionLevel:"M"});
+      if(!room.invite||room.code!==code) return send(res,404,{error:"Invitation indisponible."});
+      return send(res,200,png,"image/png");
+    }
     if(method==="GET"&&route==="/health") return send(res,200,{ok:true});
     if(method==="GET"&&staticRoutes.has(route)){
       const [file,type]=staticRoutes.get(route);

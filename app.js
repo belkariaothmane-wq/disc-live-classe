@@ -139,7 +139,7 @@ function join() {
   <label for="code">Code de séance</label><input id="code" name="code" required maxlength="8" value="${e(code)}">
   <label for="name">Prénom</label><input id="name" name="name" required maxlength="40" autocomplete="given-name">
   <label for="avatar">Silhouette du bilan</label><select id="avatar" name="avatar"><option value="neutre">Neutre</option><option value="fille">Fille</option><option value="garçon">Garçon</option></select>
-  <p class="muted">L’enseignant peut consulter vos bilans et vos réponses de binôme. Le bilan de groupe s’affiche sous forme agrégée.</p><button class="primary">Rejoindre</button></form>`,"narrow");
+  <p class="muted">L’enseignant peut consulter vos bilans et vos réponses de binôme. Si votre enseignant sélectionne votre fiche ou votre binôme pour le débrief, votre prénom et les résultats concernés s’affichent sur la projection.</p><button class="primary">Rejoindre</button></form>`,"narrow");
 }
 function activityStatus() {
   const phase=state.phase;
@@ -173,7 +173,8 @@ function teacher() {
   const views=`<div class="row watch">${["students","groups","pairs","lesson"].map((id,i)=>button(["Étudiants","Bilan du groupe","Binômes","Support de cours"][i],"view",{value:id,pressed:id===view})).join("")}</div>`;
   const roster=state.students.length?`<div class="roster">${state.students.map(s=>`<button type="button" data-action="person" data-value="${e(s.id)}"><strong>${e(s.name)}</strong><span>${Number(Boolean(s.reflexes))+Number(Boolean(s.attentes))}/2 questionnaires</span></button>`).join("")}</div>`:"<p>Aucun étudiant inscrit pour le moment.</p>";
   let contents=view==="lesson"?lesson(true):"";
-  if(view==="students")contents=`<h2>Suivi des étudiants</h2>${state.students.length?roster:"<p>Partagez le lien étudiant pour inscrire les participants.</p>"}${questionnairePreview(key)}${selected?`<div class="watch">${studentProfile(selected)}</div>`:""}`;
+  if(view==="students")contents=`<h2>Suivi des étudiants</h2>${state.students.length?roster:"<p>Partagez le lien étudiant pour inscrire les participants.</p>"}${questionnairePreview(key)}${selected?`<div class="watch">${studentProfile(selected)}
+      ${button(state.projectedStudent===selected.id?"Masquer ce bilan":"Projeter les bilans de "+selected.name,"project-student",{value:selected.id,primary:true,disabled:(!selected.reflexes&&!selected.attentes)||demo})}</div>`:""}`;
   if(view==="groups")contents=`<h2>Résultats à projeter</h2>${groups(state.groups)}`;
   if(view==="pairs"){
     const assigned=new Set(state.pairs.flatMap(p=>[p.manager,p.collaborator]));
@@ -188,7 +189,7 @@ function teacher() {
   }
   return `<p class="eyebrow">${demo?"Démonstration":"Pilotage de la séance"}</p><h1>Espace enseignant</h1>${steps}${activityStatus()}
   <div class="teacher-shell"><div>${panel(views+contents)}</div><aside>${panel(`<h2>Accès étudiant</h2><p>Code de séance <strong>${e(state.code)}</strong></p>
-  <p>${state.students.length} inscrit(s)</p><div class="row">${demo?"":`<a class="btn" href="/student?code=${e(state.code)}" target="_blank" rel="noopener">Lien étudiant</a>${button("Copier le lien","copy")}`}<a class="btn" href="/projection" target="_blank" rel="noopener">Ouvrir la projection</a></div>${demo?button("Quitter la démonstration","exit-demo"):button("Nouvelle séance","reset")}`)}</aside></div>`;
+  <p>${state.students.length} inscrit(s)</p><div class="row">${demo?"":`<a class="btn" href="/student?code=${e(state.code)}" target="_blank" rel="noopener">Lien étudiant</a>${button("Copier le lien","copy")}${button(state.invite?"Masquer le QR code":"Projeter le QR code","project-invite",{primary:!state.invite})}`}<a class="btn" href="/projection" target="_blank" rel="noopener">Ouvrir la projection</a></div>${demo?button("Quitter la démonstration","exit-demo"):button("Nouvelle séance","reset")}`)}</aside></div>`;
 }
 function questionnaire(key) {
   if(key!==draftKey){draftKey=key;question=0;try{answers=JSON.parse(sessionStorage.getItem("disc-draft-"+auth+"-"+key))||[];}catch{answers=[];}}
@@ -240,6 +241,16 @@ function student() {
 }
 function projection() {
   if(!state)return panel("<h1>Connexion à la séance…</h1>");
+  if(state.invite){
+    const code=encodeURIComponent(state.invite);
+    const link="/student?code="+code;
+    const visibleURL=location.host+link;
+    return panel(`<div class="invite-screen"><div><h1>Rejoindre DISC LIVE</h1><p>Scannez le QR code avec l’appareil photo de votre téléphone.</p>
+      <p>Code de séance <strong>${e(state.invite)}</strong></p>
+      <a class="btn" href="${link}">${e(visibleURL)}</a></div>
+      <img class="join-qr" src="/invite-qr.png?code=${code}" alt="QR code du lien étudiant DISC LIVE" width="640" height="640"></div>`);
+  }
+  if(state.student) return panel(`<h1>Bilans individuels</h1>${studentProfile(state.student)}`);
   if(state.group){
     const {key,scores,count}=state.group;
     return panel(`<p class="eyebrow">Bilan collectif</p><h1>${key==="reflexes"?"Mes réflexes":"Mes attentes"}</h1>${profile(groupTitles[key],scores,null,count)}`);
@@ -337,6 +348,7 @@ root.addEventListener("click",event=>{
   if(action==="unpair"&&!confirm("Dissoudre ce binôme et effacer ses réponses ?"))return;
   const inputs={
     lesson:{chapter:Number(value)},phase:{phase:Number(value)},"project-group":{key:value||null},reset:{},
+    "project-invite":{value:!state.invite},"project-student":{id:state.projectedStudent===value?null:value},
     unpair:{id:value},"project-pair":{id:state.projectedPair===value?null:value}
   };
   if(Object.hasOwn(inputs,action))run(()=>teacherAction({action,...inputs[action]}));
