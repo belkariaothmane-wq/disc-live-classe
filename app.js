@@ -11,7 +11,7 @@ let auth="", state=null, view="students", person="", pending=false, signature=""
 let draftKey="", answers=[], question=0;
 let pairSelected=null, pairId=null;
 const demoPerson={id:"lina",name:"Lina",avatar:"fille",reflexes:[6,2,5,3],attentes:[2,3,4,7]};
-const demoPair={id:"pair",manager:"Lina",collaborator:"Yanis",managerReady:true,collaboratorReady:true,mAnswer:0,cAnswer:2};
+const demoPair={id:"pair",caseId:1,manager:"Lina",collaborator:"Yanis",managerReady:true,collaboratorReady:true,mAnswer:0,cAnswer:2};
 let demo=false, studentActivity=null, polling=false, revision=0;
 try {auth=sessionStorage.getItem(authKey)||"";signature=localStorage.getItem("disc-signature")||"";}catch{}
 const e=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
@@ -69,12 +69,21 @@ function groups(data) {
 function lesson(controls=false) {
   const course=DISC.lesson;
   const current=state.chapter ?? 0;
+  const courseExample=state.example ?? 0;
   const chapter=course.chapters[current];
   const names=traits.map((trait,i)=>i===3?"Conformité / Conscienciosité":trait.label);
   const tile=(fields)=>`<div class="course-grid">${traits.map((trait,i)=>`<article class="course-tile" style="--tone:${trait.color}">
     ${badge(trait)}<h3>${names[i]}</h3>${fields(course.styles[i],trait)}</article>`).join("")}</div>`;
   const fields=(rows)=>rows.map(([label,value])=>`<p><strong>${label}</strong><br>${e(value)}</p>`).join("");
   const chips=(indexes)=>indexes.map(i=>badge(traits[i])).join(" ");
+  const roleExamples=()=>{
+    const example=DISC.roleExamples[courseExample];
+    return `<h3>${e(example.title)}</h3><div class="course-grid">${traits.map((trait,i)=>{
+      const role=example.examples[i];
+      return `<article class="course-tile" style="--tone:${trait.color}">${badge(trait)}<h3>${e(trait.label)}</h3>
+        ${fields([["Manager · Mon premier réflexe",role.manager],["Collaborateur · Ce que j’attends",role.collaborateur]])}</article>`;
+    }).join("")}</div>`;
+  };
   const bodies=[
     ()=>`<p>${e(course.history)}</p><div class="course-keywords">${course.uses.map(use=>`<span>${e(use)}</span>`).join("")}</div>
       <p><strong>DISC</strong> · ${names.join(" · ")}</p><p>Chaque tendance présente des atouts selon la tâche et les personnes. Une même personne peut mobiliser plusieurs tendances.</p>`,
@@ -83,10 +92,11 @@ function lesson(controls=false) {
       <article><h3>Orientation de l’attention</h3><p>${chips([0,3])} Tâche, résultat ou critères</p><p>${chips([1,2])} Relations, échanges ou coopération</p></article>
       </div><p class="muted">Le rythme et l’orientation sont deux dimensions distinctes. On peut être orienté vers la tâche tout en privilégiant une analyse posée.</p>`,
     ()=>tile((details,trait)=>`<p>${e(trait.description)}</p>`+fields([["Force",details.forces],["Préférences",details.preference],["Point de vigilance",trait.limit]])),
-    ()=>tile(details=>`<p><strong>${e(details.style)}</strong></p>`+fields([["Apport à l’équipe",details.forces],["Point de vigilance",details.caution]])),
+    ()=>tile((details,trait)=>`<p><strong>${e(details.style)}</strong></p>`+
+      fields([["Quand je manage",DISC.roleExamples[0].examples[traits.indexOf(trait)].manager],
+        ["Quand je suis managé",DISC.roleExamples[0].examples[traits.indexOf(trait)].collaborateur],["Point de vigilance",details.caution]])),
     ()=>tile(details=>fields([["Ce qui peut aider",details.expect],["À privilégier",details.adapt],["À éviter",details.avoid]])),
-    ()=>tile(details=>`<blockquote>« ${e(details.example)} »</blockquote>`)+
-      "<p>Vous pouvez adapter le canal, le niveau de détail, le degré d’autonomie ou les points d’appui.</p>",
+    ()=>roleExamples()+"<p>Vous pouvez adapter le canal, le niveau de détail, le degré d’autonomie ou les points d’appui.</p>",
     ()=>`<ul class="course-limits">${course.limits.map(limit=>`<li>${e(limit)}</li>`).join("")}</ul><p class="sample"><strong>À retenir</strong><br>${e(course.takeaway)}</p>`
   ];
   return `<section class="course"><p class="eyebrow">Cours DISC · ${current+1} / ${course.chapters.length}</p>
@@ -96,15 +106,23 @@ function lesson(controls=false) {
       <label for="course-chapter">Chapitre</label><select id="course-chapter">${course.chapters.map((item,i)=>`<option value="${i}" ${i===current?"selected":""}>${e(item.title)}</option>`).join("")}</select>
       ${button("Suivant","lesson",{value:current+1,disabled:current===course.chapters.length-1})}
     </div>`:""}<p class="course-intro">${e(chapter.intro)}</p>
+    ${controls&&current===5?`<label for="course-example">Exemple à projeter</label> <select id="course-example">${DISC.roleExamples.map((item,i)=>`<option value="${i}" ${i===courseExample?"selected":""}>${e(item.title)}</option>`).join("")}</select>`:""}
     ${bodies[current]()}<p class="sample"><strong>À discuter</strong><br>${e(chapter.discussion)}</p></section>`;
 }
+function pairCase(pair) {
+  return DISC.pairCases.find(item=>item.id===pair.caseId) || DISC.pairCases[0];
+}
+function pairContext(item) {
+  return `<h2>${e(item.title)}</h2><p class="sample">${e(item.context)}</p>`;
+}
 function pairCompare(pair) {
-  const choices=[{label:"Manager",name:pair.manager,ready:pair.managerReady,index:pair.mAnswer,items:DISC.manager},
-    {label:"Collaborateur",name:pair.collaborator,ready:pair.collaboratorReady,index:pair.cAnswer,items:DISC.collaborateur}];
+  const scenario=pairCase(pair);
+  const choices=[{label:"Manager",name:pair.manager,ready:pair.managerReady,index:pair.mAnswer,items:scenario.manager},
+    {label:"Collaborateur",name:pair.collaborator,ready:pair.collaboratorReady,index:pair.cAnswer,items:scenario.collaborateur}];
   const ready=choices.every(x=>Number.isInteger(x.index));
   const same=pair.mAnswer===pair.cAnswer;
   return `<div class="columns">${choices.map(x=>panel(`<p class="eyebrow">${x.label}</p><h3>${e(x.name)}</h3>${ready?badge(traits[x.index])+e(x.items[x.index]):`<p>${x.ready?"Réponse enregistrée":"En attente de réponse"}</p>`}`,"pair-choice").replace('class="panel pair-choice"',`class="panel pair-choice" style="--tone:${ready?traits[x.index].color:"#b5c1d4"}"`)).join("")}</div>
-    ${ready?`<p class="sample"><strong>${same?"Même priorité":"Priorités différentes"}</strong><br>${same?"Avez-vous choisi cette option pour la même raison ?":"Comment le manager peut-il tenir l’échéance en tenant compte de ce dont le collaborateur a besoin ?"} Reformulez ensemble la première phrase du manager.</p>`:""}`;
+    ${ready?`<p class="sample"><strong>${same?"Même priorité":"Priorités différentes"}</strong><br>${same?"Avez-vous choisi cette option pour la même raison ?":"Comment le manager peut-il tenir l’échéance en tenant compte de ce dont le collaborateur a besoin ?"} ${e(scenario.debrief)} Reformulez ensemble la première phrase du manager.</p>`:""}`;
 }
 function home() {
   return `<section class="hero"><div class="hero-copy"><p class="eyebrow">Atelier management</p><h1>DISC LIVE</h1><p>Repérer vos réflexes, comprendre ce que l’autre attend et adapter votre façon de manager.</p><div class="row"><a class="btn primary" href="/teacher">Préparer une séance</a><a class="btn" href="/student">Rejoindre une séance</a></div></div>
@@ -161,9 +179,11 @@ function teacher() {
     const assigned=new Set(state.pairs.flatMap(p=>[p.manager,p.collaborator]));
     const available=state.students.filter(p=>!assigned.has(p.name));
     const options=available.map(p=>`<option value="${e(p.id)}">${e(p.name)}</option>`).join("");
-    contents=`<h2>Binômes</h2><p class="context">${DISC.scene}</p>
-    <form id="pair" class="row watch"><label>Manager <select name="m" required><option value="">Choisir</option>${options}</select></label><label>Collaborateur <select name="c" required><option value="">Choisir</option>${options}</select></label><button ${available.length<2?"disabled":""}>Former le binôme</button></form>
-    ${state.pairs.map(p=>panel(`${pairCompare(p)}<div class="row watch">${button(p.id===state.projectedPair?"Retirer de la projection":"Projeter ce binôme","project-pair",{value:p.id,disabled:!p.managerReady||!p.collaboratorReady||state.phase!==3})}
+    const used=new Set(state.pairs.map(pair=>pair.caseId));
+    const scenes=DISC.pairCases.map(item=>`<option value="${item.id}">${item.id} · ${e(item.title)}${used.has(item.id)?" (déjà attribuée)":""}</option>`).join("");
+    contents=`<h2>Binômes</h2>
+    <form id="pair" class="row watch"><label>Situation <select name="caseId"><option value="">Choisir automatiquement</option>${scenes}</select></label><label>Manager <select name="m" required><option value="">Choisir</option>${options}</select></label><label>Collaborateur <select name="c" required><option value="">Choisir</option>${options}</select></label><button ${available.length<2?"disabled":""}>Former le binôme</button></form>
+    ${state.pairs.map(p=>panel(`${pairContext(pairCase(p))}${pairCompare(p)}<div class="row watch">${button(p.id===state.projectedPair?"Retirer de la projection":"Projeter ce binôme","project-pair",{value:p.id,disabled:!p.managerReady||!p.collaboratorReady||state.phase!==3})}
       ${button("Dissoudre le binôme","unpair",{value:p.id})}</div>`)).join("")}`;
   }
   return `<p class="eyebrow">${demo?"Démonstration":"Pilotage de la séance"}</p><h1>Espace enseignant</h1>${steps}${activityStatus()}
@@ -179,9 +199,13 @@ function questionnaire(key) {
   <h2>${e(item[0])}</h2><div class="answers">${permutation.map(i=>button(item[i+1],"option",{value:i,pressed:answers[question]===i})).join("")}</div>
   <div class="row form-actions">${button("Précédente","prev",{disabled:question===0})}${button(question===DISC[key].length-1?"Voir mon bilan":"Suivante","next",{primary:true,disabled:!Number.isInteger(answers[question])})}</div>`,"narrow");
 }
+function completedTest(key) {
+  const score=state.me[key];
+  return Array.isArray(score) && score.length===traits.length && sum(score)===DISC[key].length;
+}
 function studentMenu() {
   return panel(`<h1>${e(state.me.name)}</h1><div class="student-menu">${activities.map((key,i)=>{
-    const finished=key==="pair"?state.pair?.managerReady&&state.pair?.collaboratorReady:state.me[key];
+    const finished=key==="pair"?state.pair?.managerReady&&state.pair?.collaboratorReady:completedTest(key);
     const open=state.phase===i+1;
     const status=finished?"Voir mon résultat":!open?"En attente du top départ":
       key==="pair"&&!state.pair?"En attente du binôme":"Disponible";
@@ -195,7 +219,7 @@ function student() {
   const back=`<div class="row watch">${button("Retour aux activités","student-back")}</div>`;
   if(studentActivity!=="pair"){
     const key=studentActivity;
-    if(state.me[key])return back+`<div class="narrow"><h1>${e(state.me.name)}</h1>${profile(studentLabels[activities.indexOf(key)],state.me[key],state.me.avatar)}
+    if(completedTest(key))return back+`<div class="narrow"><h1>${e(state.me.name)}</h1>${profile(studentLabels[activities.indexOf(key)],state.me[key],state.me.avatar)}
       <p class="muted">Ce bilan décrit vos réponses à l’exercice. Vos choix peuvent varier suivant la situation.</p></div>`;
     if(state.phase!==activities.indexOf(key)+1)return back+panel("<h2>Questionnaire fermé</h2><p>Attendez le prochain top départ pour reprendre.</p>","narrow");
     return back+questionnaire(key);
@@ -203,14 +227,15 @@ function student() {
   const pair=state.pair;
   if(!pair)return back+panel("<h2>Jeu en binôme</h2><p>L’enseignant prépare les binômes.</p>","narrow");
   if(pairId!==pair.id){pairId=pair.id;pairSelected=null;}
+  const scenario=pairCase(pair);
   const manager=pair.role==="manager";
   const partner=manager?pair.collaborator:pair.manager;
   const pairing=`<p class="eyebrow">${e(state.me.name)} · ${manager?"Manager":"Collaborateur"}</p><p>Votre binôme <strong>${e(partner)}</strong> · ${manager?"Collaborateur":"Manager"}</p>`;
-  if(pair.managerReady&&pair.collaboratorReady)return back+panel(`${pairing}<h2>${DISC.scene}</h2>${pairCompare(pair)}`);
+  if(pair.managerReady&&pair.collaboratorReady)return back+panel(`${pairing}${pairContext(scenario)}${pairCompare(pair)}`);
   if(state.phase!==3)return back+panel(`${pairing}<h2>Activité fermée</h2><p>Attendez le prochain top départ.</p>`,"narrow");
   if(pair.answered)return back+panel(`${pairing}<h2>Réponse enregistrée</h2><p>Attendez la réponse de votre binôme pour les comparer.</p>`,"narrow");
-  return back+panel(`${pairing}<h2>${DISC.scene}</h2><p>${manager?"Que feriez-vous en premier ?":"Qu’attendriez-vous en priorité de votre manager ?"}</p>
-    <div class="answers">${DISC[pair.role].map((text,i)=>button(text,"pair-option",{value:i,pressed:pairSelected===i})).join("")}</div>
+  return back+panel(`${pairing}${pairContext(scenario)}<p>${manager?"Que feriez-vous en premier ?":"Qu’attendriez-vous en priorité de votre manager ?"}</p>
+    <div class="answers">${scenario[pair.role].map((text,i)=>button(text,"pair-option",{value:i,pressed:pairSelected===i})).join("")}</div>
     ${button("Valider ma réponse","pair-answer",{primary:true,disabled:pairSelected===null})}`,"narrow");
 }
 function projection() {
@@ -220,8 +245,8 @@ function projection() {
     return panel(`<p class="eyebrow">Bilan collectif</p><h1>${key==="reflexes"?"Mes réflexes":"Mes attentes"}</h1>${profile(groupTitles[key],scores,null,count)}`);
   }
   if(state.phase===0)return panel(`<h1>Comprendre le DISC</h1>${lesson()}`);
-  if(state.phase===3&&state.pair)return panel(`<h1>${DISC.scene}</h1>${pairCompare(state.pair)}`);
-  if(state.phase===3)return panel(`<h1>Jeu en binôme</h1><p class="sample">${DISC.scene}</p><p>Répondez sur votre téléphone selon votre rôle.</p>`);
+  if(state.phase===3&&state.pair)return panel(`<h1>Débrief du binôme</h1>${pairContext(pairCase(state.pair))}${pairCompare(state.pair)}`);
+  if(state.phase===3)return panel(`<h1>Jeu en binôme</h1><p>Ouvrez votre situation sur le téléphone. Répondez individuellement selon votre rôle, puis comparez les deux réponses.</p>`);
   return panel(`<h1>${phases[state.phase]}</h1><p>Sur votre téléphone, ouvrez « ${studentLabels[state.phase-1]} ».</p>`);
 }
 function drawAvatar(canvas) {
@@ -274,6 +299,7 @@ async function teacherAction(payload) {
   else if(payload.action==="phase")state.phase=payload.phase;
   else if(payload.action==="project-group")state.reveal=payload.key;
   else if(payload.action==="lesson")state.chapter=payload.chapter;
+  else if(payload.action==="lesson-example")state.example=payload.example;
   if(payload.action==="phase"||payload.action==="reset") {
     view=state.phase===0?"lesson":state.phase===3?"pairs":"students";
   }
@@ -320,9 +346,13 @@ root.addEventListener("submit",event=>{
   const data=Object.fromEntries(new FormData(event.target));
   if(event.target.id==="login")run(async()=>{setAuth((await call("login",data)).token);state=await call("teacher");});
   if(event.target.id==="join")run(async()=>{const dataIn=await call("join",data);setAuth(dataIn.token);state=dataIn.state;draftKey="";studentActivity=null;});
-  if(event.target.id==="pair")run(()=>teacherAction({action:"pair",...data}));
+  if(event.target.id==="pair")run(()=>teacherAction({action:"pair",...data,caseId:data.caseId?Number(data.caseId):null}));
 });
 root.addEventListener("change",event=>{
+  if(event.target.id==="course-example"){
+    run(()=>teacherAction({action:"lesson-example",example:Number(event.target.value)}));
+    return;
+  }
   if(event.target.id==="course-chapter"){
     run(()=>teacherAction({action:"lesson",chapter:Number(event.target.value)}));
     return;

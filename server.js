@@ -17,7 +17,7 @@ const host = option("--host") || "0.0.0.0";
 let room = makeRoom();
 
 function makeRoom() {
-  return {code:randomBytes(4).toString("hex").toUpperCase(), phase:0, chapter:0,
+  return {code:randomBytes(4).toString("hex").toUpperCase(), phase:0, chapter:0, example:0,
     students:[], pairs:[], reveal:null, projectedPair:null};
 }
 function summary(key, students) {
@@ -31,13 +31,13 @@ function pairView(pair, current) {
   const m = room.students.find(s=>s.id===pair.m);
   const c = room.students.find(s=>s.id===pair.c);
   const ready = Number.isInteger(pair.mAnswer) && Number.isInteger(pair.cAnswer);
-  return {id:pair.id, manager:m.name, collaborator:c.name, managerReady:Number.isInteger(pair.mAnswer),
+  return {id:pair.id, caseId:pair.caseId, manager:m.name, collaborator:c.name, managerReady:Number.isInteger(pair.mAnswer),
     collaboratorReady:Number.isInteger(pair.cAnswer), ...(ready ? {mAnswer:pair.mAnswer,cAnswer:pair.cAnswer} : {}),
     ...(current ? {role:current.id===pair.m?"manager":"collaborateur", answered:Number.isInteger(current.id===pair.m?pair.mAnswer:pair.cAnswer)} : {})};
 }
 function state(role, credential) {
   const base = {phase:room.phase};
-  if (role==="teacher") return {...base, chapter:room.chapter, code:room.code, reveal:room.reveal, projectedPair:room.projectedPair,
+  if (role==="teacher") return {...base, chapter:room.chapter, example:room.example, code:room.code, reveal:room.reveal, projectedPair:room.projectedPair,
     students:room.students.map(({id,name,avatar,reflexes,attentes})=>({id,name,avatar,reflexes,attentes})),
     pairs:room.pairs.map(pair=>pairView(pair)), groups:aggregates()};
   if (role==="student") {
@@ -47,7 +47,7 @@ function state(role, credential) {
     return {...base, me:{name:me.name,avatar:me.avatar,reflexes:me.reflexes,attentes:me.attentes}, pair:pair?pairView(pair,me):null};
   }
   const pair = room.phase===3 && room.pairs.find(p=>p.id===room.projectedPair);
-  return {...base, chapter:room.chapter, group:room.reveal?{key:room.reveal,...summary(room.reveal,room.students)}:null, pair:pair?pairView(pair):null};
+  return {...base, chapter:room.chapter, example:room.example, group:room.reveal?{key:room.reveal,...summary(room.reveal,room.students)}:null, pair:pair?pairView(pair):null};
 }
 function send(res,status,body,type="application/json") {
   res.writeHead(status,{"Content-Type":type,"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"});
@@ -67,6 +67,9 @@ function command(data) {
   } else if (action==="lesson") {
     if(!Number.isInteger(data.chapter) || data.chapter<0 || data.chapter>=DISC.lesson.chapters.length) throw Error("Chapitre inconnu.");
     room.chapter=data.chapter;
+  } else if (action==="lesson-example") {
+    if (!Number.isInteger(data.example) || !DISC.roleExamples[data.example]) throw Error("Exemple inconnu.");
+    room.example=data.example;
   } else if (action==="project-group" && [null,"reflexes","attentes"].includes(data.key)) {
     room.reveal=data.key;
     if(data.key) room.projectedPair=null;
@@ -75,7 +78,9 @@ function command(data) {
   else if (action==="pair") {
     if (data.m===data.c || ![data.m,data.c].every(id=>room.students.some(s=>s.id===id)) ||
         room.pairs.some(pair=>[data.m,data.c].some(id=>id===pair.m||id===pair.c))) throw Error("Choisissez deux étudiants disponibles.");
-    room.pairs.push({id:token(),m:data.m,c:data.c});
+    const caseId = data.caseId ?? DISC.pairCases.find(item=>!room.pairs.some(pair=>pair.caseId===item.id))?.id ?? DISC.pairCases[0].id;
+    if(!DISC.pairCases.some(item=>item.id===caseId)) throw Error("Situation inconnue.");
+    room.pairs.push({id:token(),m:data.m,c:data.c,caseId});
   } else if (action==="unpair" && room.pairs.some(pair=>pair.id===data.id)) {
     room.pairs=room.pairs.filter(pair=>pair.id!==data.id);
     if(room.projectedPair===data.id) room.projectedPair=null;
